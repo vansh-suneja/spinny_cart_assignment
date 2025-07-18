@@ -12,6 +12,8 @@ class Coupon(models.Model):
 class Cart(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     coupon = models.ForeignKey(Coupon, null=True, blank=True, on_delete=models.SET_NULL)
+    total_price = models.FloatField(default=0.0)
+
 
 class CartItem(models.Model):
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='items')

@@ -34,27 +34,58 @@ def remove_cart_item(request, item_id):
     except CartItem.DoesNotExist:
         return Response({"error": "Item not found"}, status=404)
 
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Cart, Coupon
+
 @api_view(['POST'])
 def apply_coupon(request, cart_id):
     try:
         cart = Cart.objects.get(id=cart_id)
-        coupon = Coupon.objects.get(code=request.data['code'])
-        cart.coupon = coupon
-        cart.save()
-        return Response({"success": "Coupon applied!"})
-    except (Cart.DoesNotExist, Coupon.DoesNotExist):
-        return Response({"error": "Cart or coupon not found"}, status=404)
-
-@api_view(['GET'])
-def get_total_price(request, cart_id):
-    try:
-        cart = Cart.objects.get(id=cart_id)
-        total = sum(item.product.price * item.quantity for item in cart.items.all())
-        if cart.coupon:
-            total *= (1 - cart.coupon.discount / 100)
-        return Response({"total_price": total})
     except Cart.DoesNotExist:
         return Response({"error": "Cart not found"}, status=404)
+
+    # Get coupon code from request body
+    coupon_code = request.data.get('coupon_code')
+    if not coupon_code:
+        return Response({"error": "Coupon code is required"}, status=400)
+
+    try:
+        coupon = Coupon.objects.get(code=coupon_code)
+    except Coupon.DoesNotExist:
+        return Response({"error": "Invalid coupon code"}, status=400)
+
+    cart.coupon = coupon
+    cart.save()
+
+    return Response({"message": "Coupon applied successfully", "coupon": coupon.code})
+
+@api_view(['GET'])
+def get_total_price(request):
+    user_id = request.query_params.get('user_id')
+
+    try:
+        user = User.objects.get(id=user_id)
+        cart = Cart.objects.get(user=user)
+        cart_items = cart.cartitem_set.all()
+        total = sum(item.product.price * item.quantity for item in cart_items)
+
+        discount = 0
+        if cart.coupon:
+            discount = (cart.coupon.discount / 100) * total
+            total -= discount
+
+        return Response({
+            'total_price': round(total, 2),
+            'discount_applied': round(discount, 2),
+            'coupon': cart.coupon.code if cart.coupon else None
+        })
+
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'})
+    except Cart.DoesNotExist:
+        return Response({'error': 'Cart not found'})
+
 
 @api_view(['GET'])
 def get_user_address(request, user_id):
